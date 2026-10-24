@@ -1,58 +1,27 @@
-name: Extract Kernel Offsets
-
-on:
-  workflow_dispatch:
-
-jobs:
-  build-and-extract:
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Установка инструментов и pahole
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y dwarves libelf-dev bc bison flex libssl-dev clang lld llvm make git
-
-      - name: Скачивание исходников ядра Xiaomi (garnet-t-oss)
-        run: |
-          git clone --depth=1 -b garnet-t-oss https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git kernel
-          cd kernel
-
       - name: Настройка конфига с включением отладочных символов
         run: |
           cd kernel
-          export ARCH=arm64
-          export SUBARCH=arm64
-          
-          # Проверяем наличие дефконфига garnet
-          if [ -f arch/arm64/configs/vendor/garnet_user_defconfig ]; then
-            make vendor/garnet_user_defconfig
-          elif [ -f arch/arm64/configs/vendor/garnet_defconfig ]; then
-            make vendor/garnet_defconfig
+
+          # 1. Исправляем баг Xiaomi: создаем заглушку для вырезанного драйвера hwid
+          mkdir -p drivers/misc/hwid
+          touch drivers/misc/hwid/Kconfig
+
+          # 2. Ищем реальный файл дефконфига для garnet в репозитории
+          DEFCONFIG_FILE=$(find arch/arm64/configs -name "*garnet*" -o -name "*sm7435*" | head -n 1)
+
+          if [ -n "$DEFCONFIG_FILE" ]; then
+            echo "Найден дефконфиг: $DEFCONFIG_FILE"
+            # Передаем только относительное имя от папки configs
+            CONFIG_NAME=$(echo "$DEFCONFIG_FILE" | sed 's|arch/arm64/configs/||')
+            make ARCH=arm64 $CONFIG_NAME
           else
-            make defconfig
+            echo "Дефконфиг не найден, используем defconfig"
+            make ARCH=arm64 defconfig
           fi
 
-          # Включаем DWARF и BTF
-          scripts/config --enable CONFIG_DEBUG_INFO
-          scripts/config --enable CONFIG_DEBUG_INFO_DWARF4
-          scripts/config --enable CONFIG_DEBUG_INFO_BTF
-          make olddefconfig
-
-      - name: Сборка vmlinux
-        run: |
-          cd kernel
-          # Собираем только базовый vmlinux (без полного DTB и модулей для экономии времени)
-          make -j$(nproc) ARCH=arm64 CC=clang LD=ld.lld vmlinux || true
-
-      - name: Извлечение нужных смещений через pahole
-        run: |
-          cd kernel
-          echo "==================== [RT_MUTEX_WAITER] ===================="
-          pahole -C rt_mutex_waiter vmlinux || echo "Структура не найдена"
-
-          echo "==================== [TASK_STRUCT CRED] ===================="
-          pahole -C task_struct vmlinux | grep -E "cred|real_cred" || echo "Поле не найдено"
-
-          echo "==================== [CRED СТРУКТУРА] ===================="
-          pahole -C cred vmlinux || echo "Структура не найдена"
+          # 3. Включаем генерацию отладочной информации и BTF
+          scripts/config --file .config --enable CONFIG_DEBUG_INFO
+          scripts/config --file .config --enable CONFIG_DEBUG_INFO_DWARF4
+          scripts/config --file .config --enable CONFIG_DEBUG_INFO_BTF
+          make ARCH=arm64 olddefconfig
+          
