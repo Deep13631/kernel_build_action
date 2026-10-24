@@ -18,7 +18,8 @@ jobs:
 
       - name: Скачивание исходников ядра
         run: |
-          git clone --depth=1 -b 14.0 https://github.com kernel-source
+          git clone --depth=1 -b 14.0 https://clck.ru kernel-source
+
 
       - name: Настройка конфигурации и включение BTF
         run: |
