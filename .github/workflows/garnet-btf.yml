@@ -17,27 +17,30 @@ jobs:
         run: |
           git clone --depth=1 -b garnet-t-oss https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git kernel
 
-      - name: Настройка конфига и обход ошибок Xiaomi
+      - name: Настройка конфига и вырезание битых модулей Xiaomi
         run: |
           cd kernel
 
-          # Автоматически находим все отсутствующие файлы Kconfig и создаем для них пустые заглушки
-          for file in $(grep -roh 'source "[^"]*"' drivers/ | cut -d'"' -f2); do
-            if [ ! -f "$file" ]; then
-              mkdir -p "$(dirname "$file")"
-              touch "$file"
-            fi
-          done
+          # Удаляем упоминания несуществующих папок hwid и plaid из сборочных файлов
+          sed -i '/hwid/d' drivers/misc/Makefile || true
+          sed -i '/plaid/d' drivers/misc/Makefile || true
+          sed -i '/hwid/d' drivers/misc/Kconfig || true
+          sed -i '/plaid/d' drivers/misc/Kconfig || true
+
+          # Создаем пустые заглушки для Makefile и Kconfig на случай других скрытых ссылок
+          mkdir -p drivers/misc/hwid drivers/misc/plaid
+          touch drivers/misc/hwid/Makefile drivers/misc/hwid/Kconfig
+          touch drivers/misc/plaid/Makefile drivers/misc/plaid/Kconfig
 
           # 1. Создаем базовый конфиг GKI
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- gki_defconfig
 
-          # 2. Накладываем фрагмент garnet поверх .config
+          # 2. Накладываем фрагмент garnet
           if [ -f arch/arm64/configs/vendor/garnet_GKI.config ]; then
             make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/garnet_GKI.config
           fi
 
-          # 3. Включаем отладочную информацию
+          # 3. Включаем отладочную информацию для pahole
           scripts/config --file .config --enable CONFIG_DEBUG_INFO
           scripts/config --file .config --enable CONFIG_DEBUG_INFO_DWARF4
           scripts/config --file .config --enable CONFIG_DEBUG_INFO_BTF
@@ -46,7 +49,7 @@ jobs:
       - name: Сборка базового vmlinux
         run: |
           cd kernel
-          make -j$(nproc) ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 vmlinux || true
+          make -j$(nproc) ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 vmlinux
 
       - name: Извлечение смещений
         run: |
