@@ -20,14 +20,19 @@ jobs:
       - name: Настройка конфига и обход ошибок Xiaomi
         run: |
           cd kernel
-          # Обход бага Xiaomi с вырезанным hwid
-          mkdir -p drivers/misc/hwid
-          touch drivers/misc/hwid/Kconfig
+
+          # Автоматически находим все отсутствующие файлы Kconfig и создаем для них пустые заглушки
+          for file in $(grep -roh 'source "[^"]*"' drivers/ | cut -d'"' -f2); do
+            if [ ! -f "$file" ]; then
+              mkdir -p "$(dirname "$file")"
+              touch "$file"
+            fi
+          done
 
           # 1. Создаем базовый конфиг GKI
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- gki_defconfig
 
-          # 2. Накладываем фрагмент garnet поверх созданного .config
+          # 2. Накладываем фрагмент garnet поверх .config
           if [ -f arch/arm64/configs/vendor/garnet_GKI.config ]; then
             make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/garnet_GKI.config
           fi
