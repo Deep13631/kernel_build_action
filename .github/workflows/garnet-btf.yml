@@ -1,44 +1,58 @@
-name: Build Garnet BTF Kernel
+name: Extract Kernel Offsets
+
 on:
   workflow_dispatch:
 
-env:
-  CLANG_URL: "https://github.com"
-  KERNEL_URL: "https://github.com"
-
 jobs:
-  Build-Kernel:
+  build-and-extract:
     runs-on: ubuntu-22.04
+
     steps:
-      - name: Установка инструментов сборки
+      - name: Установка инструментов и pahole
         run: |
-          sudo apt update
-          sudo apt install -y bc bison build-essential ccache flex libelf-dev libssl-dev libncurses-dev git crossbuild-essential-arm64
+          sudo apt-get update
+          sudo apt-get install -y dwarves libelf-dev bc bison flex libssl-dev clang lld llvm make git
 
-      - name: Скачивание Proton Clang с GitHub
+      - name: Скачивание исходников ядра Xiaomi (garnet-t-oss)
         run: |
-          git clone --depth=1 "$CLANG_URL" clang
+          git clone --depth=1 -b garnet-t-oss https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git kernel
+          cd kernel
 
-      - name: Скачивание исходников ядра
+      - name: Настройка конфига с включением отладочных символов
         run: |
-          git clone --depth=1 -b 14.0 "$KERNEL_URL" kernel-source
-
-      - name: Настройка конфигурации и включение BTF
-        run: |
-          cd kernel-source
-          echo "CONFIG_DEBUG_INFO_BTF=y" >> arch/arm64/configs/garnet_defconfig
-          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CC=clang garnet_defconfig
-
-      - name: Компиляция файла vmlinux
-        run: |
-          cd kernel-source
-          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-          make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CC=clang vmlinux
-
-      - name: Загрузка готового vmlinux в Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: garnet-vmlinux-btf
-          path: kernel-source/out/vmlinux
+          cd kernel
+          export ARCH=arm64
+          export SUBARCH=arm64
           
+          # Проверяем наличие дефконфига garnet
+          if [ -f arch/arm64/configs/vendor/garnet_user_defconfig ]; then
+            make vendor/garnet_user_defconfig
+          elif [ -f arch/arm64/configs/vendor/garnet_defconfig ]; then
+            make vendor/garnet_defconfig
+          else
+            make defconfig
+          fi
+
+          # Включаем DWARF и BTF
+          scripts/config --enable CONFIG_DEBUG_INFO
+          scripts/config --enable CONFIG_DEBUG_INFO_DWARF4
+          scripts/config --enable CONFIG_DEBUG_INFO_BTF
+          make olddefconfig
+
+      - name: Сборка vmlinux
+        run: |
+          cd kernel
+          # Собираем только базовый vmlinux (без полного DTB и модулей для экономии времени)
+          make -j$(nproc) ARCH=arm64 CC=clang LD=ld.lld vmlinux || true
+
+      - name: Извлечение нужных смещений через pahole
+        run: |
+          cd kernel
+          echo "==================== [RT_MUTEX_WAITER] ===================="
+          pahole -C rt_mutex_waiter vmlinux || echo "Структура не найдена"
+
+          echo "==================== [TASK_STRUCT CRED] ===================="
+          pahole -C task_struct vmlinux | grep -E "cred|real_cred" || echo "Поле не найдено"
+
+          echo "==================== [CRED СТРУКТУРА] ===================="
+          pahole -C cred vmlinux || echo "Структура не найдена"
