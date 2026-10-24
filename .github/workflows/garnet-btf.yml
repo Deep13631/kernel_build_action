@@ -43,6 +43,25 @@ jobs:
             fi
           done
 
+          # Устраняем дублирование функций в drivers/usb/gadget/udc/core.c
+          python3 -c '
+          with open("drivers/usb/gadget/udc/core.c", "r") as f:
+              content = f.read()
+
+          def fix_func(name, text):
+              pattern = "static inline void " + name
+              parts = text.split(pattern)
+              if len(parts) > 2:
+                  return pattern.join(parts[:2]) + "static inline void __attribute__((unused)) " + name + "_dup" + ("static inline void __attribute__((unused)) " + name + "_dup").join(parts[2:])
+              return text
+
+          content = fix_func("usb_gadget_enable_async_callbacks", content)
+          content = fix_func("usb_gadget_disable_async_callbacks", content)
+
+          with open("drivers/usb/gadget/udc/core.c", "w") as f:
+              f.write(content)
+          '
+
           # 1. Создаем базовый конфиг GKI
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- gki_defconfig
 
