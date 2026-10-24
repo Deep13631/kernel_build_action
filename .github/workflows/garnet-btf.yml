@@ -2,6 +2,10 @@ name: Build Garnet BTF Kernel
 on:
   workflow_dispatch:
 
+env:
+  CLANG_URL: "https://github.com"
+  KERNEL_URL: "https://github.com"
+
 jobs:
   Build-Kernel:
     runs-on: ubuntu-22.04
@@ -13,20 +17,16 @@ jobs:
 
       - name: Скачивание Proton Clang с GitHub
         run: |
-          # Скачиваем легковесный и проверенный компилятор Proton Clang напрямую из репозитория GitHub
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang clang
+          git clone --depth=1 "$CLANG_URL" clang
 
       - name: Скачивание исходников ядра
         run: |
-          git clone --depth=1 -b 14.0 https://clck.ru kernel-source
-
+          git clone --depth=1 -b 14.0 "$KERNEL_URL" kernel-source
 
       - name: Настройка конфигурации и включение BTF
         run: |
           cd kernel-source
-          # Добавляем флаг генерации BTF-таблиц для оффсетов Ghostlock
           echo "CONFIG_DEBUG_INFO_BTF=y" >> arch/arm64/configs/garnet_defconfig
-          
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CC=clang garnet_defconfig
 
@@ -34,7 +34,6 @@ jobs:
         run: |
           cd kernel-source
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-          # Собираем только исполняемый vmlinux, чтобы процесс занял минимум времени
           make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CC=clang vmlinux
 
       - name: Загрузка готового vmlinux в Artifacts
@@ -42,3 +41,4 @@ jobs:
         with:
           name: garnet-vmlinux-btf
           path: kernel-source/out/vmlinux
+          
