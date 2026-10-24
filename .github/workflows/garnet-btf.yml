@@ -102,4 +102,34 @@ jobs:
         with:
           name: garnet-vmlinux-with-btf
           path: kernel/vmlinux
-        
+
+      - name: Сборка базового vmlinux и Image
+        run: |
+          cd kernel
+          make -j$(nproc) ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 KCFLAGS="-Wno-error" Image vmlinux
+
+      - name: Упаковка ядра в boot.img
+        run: |
+          cd kernel
+          # Клонируем официальный репозиторий mkbootimg
+          git clone --depth=1 https://android.googlesource.com/platform/system/tools/mkbootimg tools
+          
+          # Создаем минимальный валидный пустой cpio ramdisk
+          mkdir -p empty_ramdisk
+          (cd empty_ramdisk && find . | cpio -H newc -o | gzip -9) > ramdisk.cpio.gz
+          
+          # Упаковываем ядро
+          python3 tools/mkbootimg.py \
+            --kernel arch/arm64/boot/Image \
+            --ramdisk ramdisk.cpio.gz \
+            --header_version 2 \
+            --os_version 13.0.0 \
+            --os_patch_level 2024-02 \
+            -o custom_boot.img
+
+      - name: Загрузка готового boot.img в Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: btf-boot-image
+          path: kernel/custom_boot.img
+          
