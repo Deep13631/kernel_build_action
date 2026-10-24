@@ -9,7 +9,7 @@ jobs:
       - name: Установка инструментов сборки
         run: |
           sudo apt update
-          sudo apt install -y bc bison build-essential ccache flex libelf-dev libssl-dev libncurses-dev git libstringi-dev crossbuild-essential-arm64
+          sudo apt install -y bc bison build-essential ccache flex libelf-dev libssl-dev libncurses-dev git crossbuild-essential-arm64
 
       - name: Скачивание Google Clang
         run: |
