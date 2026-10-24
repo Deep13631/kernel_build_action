@@ -11,7 +11,7 @@ jobs:
       - name: Установка инструментов и pahole
         run: |
           sudo apt-get update
-          sudo apt-get install -y dwarves libelf-dev bc bison flex libssl-dev clang lld llvm make git
+          sudo apt-get install -y dwarves libelf-dev bc bison flex libssl-dev clang lld llvm make git gcc-aarch64-linux-gnu
 
       - name: Скачивание исходников ядра Xiaomi
         run: |
@@ -20,24 +20,28 @@ jobs:
       - name: Настройка конфига и обход ошибок Xiaomi
         run: |
           cd kernel
+          # Обход бага Xiaomi с вырезанным hwid
           mkdir -p drivers/misc/hwid
           touch drivers/misc/hwid/Kconfig
-          DEFCONFIG_FILE=$(find arch/arm64/configs -name "*garnet*" -o -name "*sm7435*" | head -n 1)
-          if [ -n "$DEFCONFIG_FILE" ]; then
-            CONFIG_NAME=$(echo "$DEFCONFIG_FILE" | sed 's|arch/arm64/configs/||')
-            make ARCH=arm64 $CONFIG_NAME
-          else
-            make ARCH=arm64 defconfig
+
+          # 1. Создаем базовый конфиг GKI
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- gki_defconfig
+
+          # 2. Накладываем фрагмент garnet поверх созданного .config
+          if [ -f arch/arm64/configs/vendor/garnet_GKI.config ]; then
+            make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/garnet_GKI.config
           fi
+
+          # 3. Включаем отладочную информацию
           scripts/config --file .config --enable CONFIG_DEBUG_INFO
           scripts/config --file .config --enable CONFIG_DEBUG_INFO_DWARF4
           scripts/config --file .config --enable CONFIG_DEBUG_INFO_BTF
-          make ARCH=arm64 olddefconfig
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
       - name: Сборка базового vmlinux
         run: |
           cd kernel
-          make -j$(nproc) ARCH=arm64 CC=clang LD=ld.lld vmlinux || true
+          make -j$(nproc) ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 vmlinux || true
 
       - name: Извлечение смещений
         run: |
