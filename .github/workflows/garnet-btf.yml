@@ -62,6 +62,12 @@ jobs:
               f.write(content)
           '
 
+          # Исправляем неиспользуемую переменную в devfreq_cooling.c
+          sed -i 's/struct device \*dev = df->dev.parent;/struct device __attribute__((unused)) \*dev = df->dev.parent;/' drivers/thermal/devfreq_cooling.c || true
+
+          # Отключаем превращение предупреждений в ошибки в Makefile
+          echo "KBUILD_CFLAGS += -Wno-error" >> Makefile
+
           # 1. Создаем базовый конфиг GKI
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- gki_defconfig
 
@@ -79,7 +85,7 @@ jobs:
       - name: Сборка базового vmlinux
         run: |
           cd kernel
-          make -j$(nproc) ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 vmlinux
+          make -j$(nproc) ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 KCFLAGS="-Wno-error" vmlinux
 
       - name: Извлечение смещений
         run: |
