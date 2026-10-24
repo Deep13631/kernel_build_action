@@ -9,16 +9,12 @@ jobs:
       - name: Установка инструментов сборки
         run: |
           sudo apt update
-          sudo apt install -y bc bison build-essential ccache flex libelf-dev libssl-dev libncurses-dev git crossbuild-essential-arm64 wget
+          sudo apt install -y bc bison build-essential ccache flex libelf-dev libssl-dev libncurses-dev git crossbuild-essential-arm64
 
-      - name: Скачивание Google Clang
+      - name: Скачивание Proton Clang с GitHub
         run: |
-          mkdir clang
-          cd clang
-          # Испольуем wget с официальным статическим архивом сборщика ядер Android
-          wget -q --show-progress "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master-kernel-build-2022/clang-r450784d.tar.gz"
-          tar -xzf clang-r450784d.tar.gz
-          rm -f clang-r450784d.tar.gz
+          # Скачиваем легковесный и проверенный компилятор Proton Clang напрямую из репозитория GitHub
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang clang
 
       - name: Скачивание исходников ядра
         run: |
@@ -27,15 +23,18 @@ jobs:
       - name: Настройка конфигурации и включение BTF
         run: |
           cd kernel-source
+          # Добавляем флаг генерации BTF-таблиц для оффсетов Ghostlock
           echo "CONFIG_DEBUG_INFO_BTF=y" >> arch/arm64/configs/garnet_defconfig
+          
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang garnet_defconfig
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CC=clang garnet_defconfig
 
       - name: Компиляция файла vmlinux
         run: |
           cd kernel-source
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-          make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang vmlinux
+          # Собираем только исполняемый vmlinux, чтобы процесс занял минимум времени
+          make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CC=clang vmlinux
 
       - name: Загрузка готового vmlinux в Artifacts
         uses: actions/upload-artifact@v4
