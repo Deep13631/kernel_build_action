@@ -9,14 +9,16 @@ jobs:
       - name: Установка инструментов сборки
         run: |
           sudo apt update
-          sudo apt install -y bc bison build-essential ccache flex libelf-dev libssl-dev libncurses-dev git crossbuild-essential-arm64
+          sudo apt install -y bc bison build-essential ccache flex libelf-dev libssl-dev libncurses-dev git crossbuild-essential-arm64 wget
 
       - name: Скачивание Google Clang
         run: |
           mkdir clang
           cd clang
-          curl -LO https://googlesource.com
+          # Испольуем wget с официальным статическим архивом сборщика ядер Android
+          wget -q --show-progress "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master-kernel-build-2022/clang-r450784d.tar.gz"
           tar -xzf clang-r450784d.tar.gz
+          rm -f clang-r450784d.tar.gz
 
       - name: Скачивание исходников ядра
         run: |
