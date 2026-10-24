@@ -1,23 +1,29 @@
 name: Build Garnet BTF Kernel
 on:
-  workflow_dispatch: # Позволяет запускать сборку вручную кнопкой
+  workflow_dispatch:
 
 jobs:
   Build-Kernel:
     runs-on: ubuntu-latest
     steps:
+      - name: Скачивание исходников ядра
+        run: |
+          git clone --depth=1 -b 14.0 https://github.com kernel-source
+          
+      - name: Включение флага CONFIG_DEBUG_INFO_BTF
+        run: |
+          cd kernel-source
+          echo "CONFIG_DEBUG_INFO_BTF=y" >> arch/arm64/configs/garnet_defconfig
+
       - name: Сборка ядра через Action
         uses: dabao1955/kernel_build_action@main
         with:
-          kernel-url: https://github.com/crdroidandroid/android_xiaomi_kernel_garnet
-          kernel-branch: 14.0
+          kernel-dir: kernel-source
           config: garnet_defconfig
           arch: arm64
-          aosp-gcc: true
+          aosp-gcc: false
           aosp-clang: true
           android-version: 13
           aosp-clang-version: r450784d
           disable-lto: true
           anykernel3: true
-          extra-cmd: |
-            echo "CONFIG_DEBUG_INFO_BTF=y" >> arch/arm64/configs/garnet_defconfig
