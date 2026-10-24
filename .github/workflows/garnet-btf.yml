@@ -4,26 +4,39 @@ on:
 
 jobs:
   Build-Kernel:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
+      - name: Установка инструментов сборки
+        run: |
+          sudo apt update
+          sudo apt install -y bc bison build-essential ccache flex libelf-dev libssl-dev libncurses-dev git libstringi-dev crossbuild-essential-arm64
+
+      - name: Скачивание Google Clang
+        run: |
+          mkdir clang
+          cd clang
+          curl -LO https://googlesource.com
+          tar -xzf clang-r450784d.tar.gz
+
       - name: Скачивание исходников ядра
         run: |
           git clone --depth=1 -b 14.0 https://github.com kernel-source
-          
-      - name: Включение флага CONFIG_DEBUG_INFO_BTF
+
+      - name: Настройка конфигурации и включение BTF
         run: |
           cd kernel-source
           echo "CONFIG_DEBUG_INFO_BTF=y" >> arch/arm64/configs/garnet_defconfig
+          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang garnet_defconfig
 
-      - name: Сборка ядра через Action
-        uses: dabao1955/kernel_build_action@main
+      - name: Компиляция файла vmlinux
+        run: |
+          cd kernel-source
+          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+          make -j$(nproc) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- CC=clang vmlinux
+
+      - name: Загрузка готового vmlinux в Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          kernel-dir: kernel-source
-          config: garnet_defconfig
-          arch: arm64
-          aosp-gcc: false
-          aosp-clang: true
-          android-version: 13
-          aosp-clang-version: r450784d
-          disable-lto: true
-          anykernel3: true
+          name: garnet-vmlinux-btf
+          path: kernel-source/out/vmlinux
