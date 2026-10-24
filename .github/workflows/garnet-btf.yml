@@ -96,3 +96,10 @@ jobs:
           pahole -C task_struct vmlinux | grep -E "(cred|real_cred)" || true
           echo "==================== [CRED СТРУКТУРА] ===================="
           pahole -C cred vmlinux || true
+
+      - name: Сохранение файла vmlinux для Ghostlock
+        uses: actions/upload-artifact@v4
+        with:
+          name: garnet-vmlinux-with-btf
+          path: kernel/vmlinux
+        
